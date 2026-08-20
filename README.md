@@ -15,10 +15,9 @@
 - 容器镜像基于 busybox，SPK 运行时从远程下载，镜像体积小，可随时指定迅雷引擎版本
 - **对外 HTTP API**（详见 [API.md](API.md)）：添加下载任务（支持按分类目录保存）、任务列表、暂停/恢复/删除、可下载目录树与登录态查询，方便 Agent / Skill 自动化
 - **内置 Agent Skill**（`skills/xunlei-download/`，符合 Agent Skills 标准）：任何支持该标准的 agent 可一键安装、自动操作下载
-- 面板登录保护可选：仅设置 `XL_DASHBOARD_PASSWORD` 才启用用户名密码，默认直接开放（直达迅雷扫码登录）
-- 兼容性修复：嵌入的 authenticate_cgi 改为静态编译，兼容 glibc < 2.34 的容器（如 ubuntu:focal）
 - 跨平台开发：非 Linux 主机也可编译本项目
-- 镜像已发布到阿里云容器镜像服务（国内拉取更快），内置迅雷引擎 v3.23.5
+- 镜像已发布到阿里云容器镜像服务（国内拉取更快）
+- 支持面板在线更新
 
 ## Agent / Skill 自动化
 
@@ -62,17 +61,9 @@ git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
 
 #### 镜像
 
-本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快）。镜像版本 **v1.1**（独立于迅雷引擎版本，内置迅雷引擎 v3.23.5，支持面板在线更新）：
 
 ```plain
 crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.1
-```
-
-上游镜像（可作参考）：
-
-```plain
-cnk3x/xunlei:beta
-ghcr.io/cnk3x/xunlei:beta
 ```
 
 
