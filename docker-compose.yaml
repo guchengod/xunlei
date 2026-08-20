@@ -10,8 +10,9 @@ services:
     # 宿主机名，迅雷远程控制的名称与此相关，会显示 `群晖-r66s`
     hostname: r66s
 
-    # 必须, cap_add: [SYS_ADMIN] 和 privileged: true 二选一
-    cap_add: [SYS_ADMIN]
+    # 必须: 需特权模式才能在容器内 mount proc/dev + chroot,否则启动报 permission denied
+    # (飞牛/群晖等 NAS 部署务必开启) 二选一: privileged: true(推荐) 或 cap_add: [SYS_ADMIN] + security_opt: [seccomp=unconfined]
+    privileged: true
 
     # 面板访问端口，如需更改访问端口到5432，替换前面的2345为5432即可
     ports: [2345:2345/tcp]

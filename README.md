@@ -66,6 +66,15 @@ git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
 crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.1
 ```
 
+#### 权限要求（务必满足）
+
+容器必须以**特权模式**运行才能挂载 proc/dev 并 chroot，否则启动会报 `permission denied` 直接退出（飞牛/群晖等 NAS 部署最容易遇到）：
+
+- 推荐：`privileged: true`
+- 或：`cap_add: [SYS_ADMIN]` 且 `security_opt: [seccomp=unconfined]`（仅 SYS_ADMIN 不够，Docker 默认 seccomp 会拦截容器内 mount）
+
+仓库根目录的 [`docker-compose.yaml`](docker-compose.yaml) 已按 `privileged: true` 配置好，直接使用即可。
+
 
 #### 参数
 
