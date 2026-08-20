@@ -131,7 +131,7 @@ func Run(cfg Config) func(ctx context.Context) error {
 			cmdx.Flags(
 				"-launcher_listen", "unix://"+SOCK_LAUNCHER_LISTEN,
 				"-pid", FILE_PID,
-				"-update_url", utils.Iif(cfg.PreventUpdate, "null", ""),
+				"-update_url", utils.Iif(cfg.PreventUpdate, "null", defaultUpdateURL()),
 				"-logfile", cfg.LauncherLogFile,
 			),
 			cmdx.Dir(DIR_SYNOPKG_WORK),
@@ -209,6 +209,14 @@ func webRun(ctx context.Context, env []string, cfg Config, onDone func()) {
 	} else {
 		slog.InfoContext(ctx, "done")
 	}
+}
+
+// defaultUpdateURL 返回官方迅雷在线更新源(按架构选择)。
+// launcher 拉取该 versions.info, 面板即可在线升级迅雷引擎(如 amd64 3.23.5 -> 3.23.7)。
+func defaultUpdateURL() string {
+	return utils.Iif(runtime.GOARCH == "amd64",
+		"https://2rvk4e3gkdnl7u1kl0k.xbase.cloud/v1/file/pancli/versions.info.amd64",
+		"https://2rvk4e3gkdnl7u1kl0k.xbase.cloud/v1/file/pancli/versions.info.arm64")
 }
 
 func mockEnv(dirData, dirDownload string) []string {
