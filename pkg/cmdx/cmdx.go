@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -29,6 +30,12 @@ func Run(ctx context.Context, name string, options ...Option) (err error) {
 		return
 	}
 	defer clean()
+
+	// 显式提供 stdin: 避免 exec 启动时打开 /dev/null
+	// (无特权容器的 chroot 内可能没有 /dev/null, 会导致 cmdx start 失败)
+	if c.Stdin == nil {
+		c.Stdin = strings.NewReader("")
+	}
 
 	if c.preStart != nil {
 		if err = c.preStart(c); err != nil {

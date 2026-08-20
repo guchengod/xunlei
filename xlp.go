@@ -102,6 +102,9 @@ func Run(cfg Config) func(ctx context.Context) error {
 		ctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 
+		// 无特权(无法挂载 devtmpfs)时, 兜底创建基本设备文件, 避免启动 launcher 因缺 /dev/null 失败
+		ensureDevNodes()
+
 		fixPath := func(s string) (rel string, err error) {
 			if rel, err = filepath.Rel(cfg.Root, s); err != nil {
 				return "", err
@@ -217,6 +220,23 @@ func defaultUpdateURL() string {
 	return utils.Iif(runtime.GOARCH == "amd64",
 		"https://2rvk4e3gkdnl7u1kl0k.xbase.cloud/v1/file/pancli/versions.info.amd64",
 		"https://2rvk4e3gkdnl7u1kl0k.xbase.cloud/v1/file/pancli/versions.info.arm64")
+}
+
+// ensureDevNodes 在无特权(无法挂载 devtmpfs)时, 于 chroot 内兜底创建基本设备文件,
+// 避免 exec 启动 launcher 时因缺少 /dev/null 等而失败。
+// 有权限时用 mknod 生成真实字符设备; 无权限则降级为普通文件占位(尽力运行)。
+// ensureDevNodes 在无特权(无法挂载 devtmpfs)时, 于 chroot 内兜底创建基本设备文件,
+// 避免启动 launcher 时因缺少 /dev/null 等而失败。仅作降级占位(尽力运行)。
+func ensureDevNodes() {
+	for _, name := range []string{"null", "zero", "random", "urandom", "full", "tty"} {
+		p := filepath.Join("/dev", name)
+		if _, err := os.Lstat(p); err == nil {
+			continue
+		}
+		if f, e := os.OpenFile(p, os.O_CREATE|os.O_WRONLY, 0o666); e == nil {
+			f.Close()
+		}
+	}
 }
 
 func mockEnv(dirData, dirDownload string) []string {
