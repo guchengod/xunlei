@@ -95,6 +95,25 @@ func (a *XLAPI) taskTypeOf(ctx context.Context, space, id string) string {
 	return "user#download-url"
 }
 
+// deviceSpace 解析设备离线下载空间(device_id#...), 面板创建任务的 space/target 即此值。
+func (a *XLAPI) deviceSpace(ctx context.Context) string {
+	var cfg struct {
+		DeviceSpace string `json:"device_space"`
+	}
+	if res, err := a.dc.Do(ctx, http.MethodGet, "/device/config", "", nil, &cfg); err == nil && res.Status == 200 && cfg.DeviceSpace != "" {
+		return cfg.DeviceSpace
+	}
+	var out struct {
+		Tasks []struct {
+			Space string `json:"space"`
+		} `json:"tasks"`
+	}
+	if res, err := a.dc.Do(ctx, http.MethodGet, "/drive/v1/tasks?limit=1", "", nil, &out); err == nil && res.Status == 200 && len(out.Tasks) > 0 && out.Tasks[0].Space != "" {
+		return out.Tasks[0].Space
+	}
+	return ""
+}
+
 // info GET /api/v1/info
 // 返回设备配置、登录态、下载目录、运行版本等。
 func (a *XLAPI) info(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +250,11 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	space := a.spaceOf(req.Space)
+	space := req.Space
+	if space == "" {
+		// 设备离线下载需显式设备空间(device_id#...), 面板创建即如此; 否则引擎不解析磁力/不拿文件信息
+		space = a.deviceSpace(r.Context())
+	}
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -360,8 +383,20 @@ func (a *XLAPI) listTasks(w http.ResponseWriter, r *http.Request) {
 // 对应页面新增下载时「获取磁力详细文件信息」那一步, 返回 list.resources。
 func (a *XLAPI) taskFiles(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	space := a.spaceOf(r.URL.Query().Get("space"))
-	typ := a.taskTypeOf(r.Context(), space, id)
+	// 先按 id 拿任务的真实空间与类型(space 为空让引擎按设备空间解析)
+	var found struct {
+		Tasks []struct {
+			Space string `json:"space"`
+			Type  string `json:"type"`
+		} `json:"tasks"`
+	}
+	fj, _ := json.Marshal(map[string]any{"id": map[string]any{"in": id}})
+	if res, err := a.dc.Do(r.Context(), http.MethodGet, "/drive/v1/tasks?"+drive.Query("filters", string(fj)), "", nil, &found); err != nil || res.Status != 200 || len(found.Tasks) == 0 {
+		a.err(w, http.StatusNotFound, "task not found")
+		return
+	}
+	space := found.Tasks[0].Space
+	typ := found.Tasks[0].Type
 	body := map[string]any{"space": space, "id": id, "type": typ}
 	res, err := a.dc.Do(r.Context(), http.MethodPost, "/drive/v1/resource/list", space, body, nil)
 	if err != nil {
