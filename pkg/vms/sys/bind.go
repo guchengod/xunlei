@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"path/filepath"
-	"syscall"
 
 	"github.com/cnk3x/xunlei/pkg/utils"
 )
@@ -39,10 +38,12 @@ func Bind(ctx context.Context, m BindOptions) (undo Undo, err error) {
 		var dirUndo Undo
 		if dirUndo, err = Mkdir(ctx, m.Target, 0777); err == nil {
 			bq.Put(dirUndo)
-			if err = syscall.Mount(src, m.Target, "", syscall.MS_BIND, ""); err == nil {
+			if err = mount(src, m.Target, "", MS_BIND, ""); err == nil {
 				bq.Put(mkUnmount(ctx, m.Target, "unbind"))
 			}
+
 		}
+
 	}
 
 	attrs := []slog.Attr{

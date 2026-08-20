@@ -38,9 +38,10 @@ func Mount(ctx context.Context, m MountOptions) (undo Undo, err error) {
 	var dirUndo Undo
 	if dirUndo, err = Mkdir(ctx, m.Target, 0777); err == nil {
 		bq.Put(dirUndo)
-		if err = syscall.Mount(m.Source, m.Target, m.Fstype, m.Flags, m.Data); err == nil {
+		if err = mount(m.Source, m.Target, m.Fstype, m.Flags, m.Data); err == nil {
 			bq.Put(mkUnmount(ctx, m.Target, "unmount"))
 		}
+
 	}
 
 	err = logIt(ctx, err, m.Optional, "mount",
@@ -52,7 +53,7 @@ func Mount(ctx context.Context, m MountOptions) (undo Undo, err error) {
 
 func mkUnmount(ctx context.Context, target, act string) Undo {
 	return func() {
-		err := syscall.Unmount(target, syscall.MNT_DETACH|syscall.MNT_FORCE)
+		err := syscall.Unmount(target, MNT_DETACH|MNT_FORCE)
 		if err != nil {
 			if os.IsNotExist(err) {
 				slog.LogAttrs(ctx, slog.LevelWarn, act, slog.String("target", target), slog.String("err", os.ErrNotExist.Error()))

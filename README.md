@@ -8,12 +8,24 @@
 [4]: https://img.shields.io/docker/v/cnk3x/xunlei
 [5]: https://hub.docker.com/r/cnk3x/xunlei
 
+> **本仓库为 [cnk3x/xunlei](https://github.com/cnk3x/xunlei) 的 fork**
+>
+> fork 自 [https://github.com/cnk3x/xunlei.git](https://github.com/cnk3x/xunlei.git)，用于研究、学习与个人使用的二次开发。
+> 感谢原作者 [cnk3x](https://github.com/cnk3x) 及其贡献者，本仓库保留上游全部功能与文档。
+
+本 fork 在上游基础上的主要改动：
+
+- 新增对外 **HTTP API**（详见 [API.md](API.md)）：`POST /api/v1/download` 添加下载任务、任务列表/暂停/恢复/删除、登录态与设备信息查询，方便 Agent / Skill 自动化操作；
+- 面板登录保护改为可选：仅设置 `XL_DASHBOARD_PASSWORD`（`--dashboard_password`）时才启用用户名密码，未设置则直接开放（直达迅雷扫码登录）；
+- 修复 index.cgi 登录态校验在部分容器（glibc < 2.34，如 ubuntu:focal）中失败的问题（将嵌入的 `authenticate_cgi` 改为静态编译）；
+- 非 Linux 平台（如 macOS 开发机）可正常编译本项目。
+
 从迅雷群晖套件中提取出来用于其他设备的迅雷远程下载服务程序。仅供研究学习测试。 \
 本程序仅提供 Linux 模拟和容器化运行环境，未对原版迅雷程序进行任何修改。
 
 **当前为测试版本，版本号 [4.0.0-beta](https://hub.docker.com/layers/cnk3x/xunlei/4.0.0-beta)，且并未大规模验证。**
 
-**3.20 版本介绍在此: (https://github.com/cnk3x/xunlei/tree/v3.20.2)**
+**3.20 版本介绍在此: (<https://github.com/cnk3x/xunlei/tree/v3.20.2>)**
 
 ## 特性
 
@@ -22,20 +34,67 @@
 - 容器镜像基于busybox，不再内嵌SPK，改成从远程下载，大幅减小了镜像体积(50M->5M)。
 - 不再内嵌SPK，不在受镜像包的luncher限制，理论上随时可以使用任何指定的版本。
 
+## Agent / Skill 自动化
+
+本仓库自带一个 Agent Skill（`.pi/skills/xunlei-download/`），让 pi / 其它 Agent 可以直接通过 HTTP API 帮你**添加下载、管理任务**，适合自动化（例如收到链接自动拉取）。接口完整说明见 [API.md](API.md)。
+
+### Skill 位置与加载
+
+- pi 会在项目目录自动发现 `.pi/skills/xunlei-download/`（项目需被信任）
+- 手动调用：`/skill:xunlei-download`；或直接运行脚本 `./.pi/skills/xunlei-download/scripts/xunlei.py ...`
+
+### 脚本用法（依赖 Python 3 标准库）
+
+```bash
+export XL_HOST=http://your-nas:2345      # 服务地址, 默认 http://localhost:2345
+# export XL_AUTH=user:pass               # 仅当设置了 XL_DASHBOARD_PASSWORD 时
+
+# 查看可下载目录树（Docker 挂载目录、电影/动漫等分类都在这里）
+./.pi/skills/xunlei-download/scripts/xunlei.py dirs
+
+# 添加磁力链下载（自动开始）
+./.pi/skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --name "电影"
+# 按分类保存到 /downloads/动漫/2025/（目录不存在会自动创建）
+./.pi/skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --dir "动漫/2025"
+
+# 任务列表（--all 看全部）/ 暂停 / 恢复 / 删除
+./.pi/skills/xunlei-download/scripts/xunlei.py list --all
+./.pi/skills/xunlei-download/scripts/xunlei.py pause <task_id>
+./.pi/skills/xunlei-download/scripts/xunlei.py delete <task_id>
+
+# 设备信息 / 登录态
+./.pi/skills/xunlei-download/scripts/xunlei.py info
+./.pi/skills/xunlei-download/scripts/xunlei.py login
+```
+
+> 分类放置：Agent 可先用 `dirs` 拿到实际目录，再按内容类型（剧集/电影/动漫/音乐/其他）匹配子目录，或按用户指定的 `--dir`/`--path` 保存；未指定则落到下载根目录。
+
+脚本返回原始 JSON；出错时以非零退出码 + `{"error":...}` 报告。
+
+### 注意事项
+
+- 添加下载前需先在网页面板（端口 2345）扫码登录迅雷账号一次；
+- 未登录或在容器/进程重启后设备空间未激活时，新增任务会被引擎拒绝（`refresh token not found` / `device_space_not_active`），保持容器常驻可避免大部分情况，已有下载不受影响；
+- 迅雷账号有每日免费下载次数限制，超额时新任务会被拒绝。
+
 ## 使用
 
 ### Docker
 
 #### 镜像
 
+本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快）：
+
+```plain
+crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:4.0.0-beta
+```
+
+上游镜像（如需回退，[docker-compose.yaml](docker-compose.yaml) 中也已注释说明）：
+
 ```plain
 cnk3x/xunlei:beta
 ghcr.io/cnk3x/xunlei:beta
 
-# 或者指定版本
-cnk3x/xunlei:4.0.0-beta
-ghcr.io/cnk3x/xunlei:4.0.0-beta
-```
 
 #### 参数
 

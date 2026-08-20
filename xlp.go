@@ -3,6 +3,8 @@ package xunlei
 import (
 	"context"
 	"fmt"
+	"io"
+	stdlog "log"
 	"log/slog"
 	"net/http"
 	"net/http/cgi"
@@ -20,6 +22,7 @@ import (
 	"github.com/cnk3x/xunlei/pkg/vms/sys"
 	"github.com/cnk3x/xunlei/pkg/web"
 	"github.com/cnk3x/xunlei/spk"
+	"github.com/go-chi/chi/v5"
 )
 
 const Version = "4.0.0"
@@ -162,19 +165,37 @@ func webRun(ctx context.Context, env []string, cfg Config, onDone func()) {
 		),
 	)
 
-	lErr := cmdx.LineWriter(func(s string) { slog.DebugContext(ctx, "[cgi] [err] "+s) })
+	// index.cgi 每次被调用都会在 stderr 打印大量例行 INFO (getEnvs/config.init/loadenv 等)
+	// 以及 net/http/cgi 把非 HTTP 头误报为 bogus header line。
+	// 只保留真正的错误行, 避免刷屏; 全部仍为 Debug 级, 默认 info 日志本就不显示。
+	lErr := cmdx.LineWriter(func(s string) {
+		if strings.Contains(s, "ERROR") || strings.Contains(s, "WARN") ||
+			strings.Contains(s, "panic") || strings.Contains(s, "FATAL") {
+			slog.DebugContext(ctx, "[cgi] "+s)
+		}
+	})
 	defer lErr.Close()
 
-	lLog := cmdx.LineWriter(func(s string) { slog.DebugContext(ctx, "[cgi] [log] "+s) })
-	defer lLog.Close()
-
 	const CGI_PATH = "/webman/3rdparty/" + SYNOPKG_PKGNAME + "/index.cgi/"
-	mux.With(web.BasicAuth(cfg.DashboardUsername, cfg.DashboardPassword)).Mount(CGI_PATH, &cgi.Handler{
+
+	// 面板 + API 的 Basic 认证仅在设置了 --dashboard_password 时启用;
+	// 未设置密码则直接开放(直达迅雷扫码登录页), 方便本机/NAS 使用。
+	if cfg.DashboardPassword != "" {
+		mux.Use(web.BasicAuth(cfg.DashboardUsername, cfg.DashboardPassword))
+	}
+
+	mux.Mount(CGI_PATH, &cgi.Handler{
 		Dir:    DIR_SYNOPKG_WORK,
 		Path:   FILE_INDEX_CGI,
 		Env:    env,
 		Stderr: lErr,
-		Logger: utils.LogStd(lLog),
+		// 丢弃 net/http/cgi 的 bogus header line 类噪音
+		Logger: stdlog.New(io.Discard, "", 0),
+	})
+
+	// 对外 API (供 Agent / Skill 自动添加下载等)
+	mux.Route("/api/v1", func(r chi.Router) {
+		NewAPI(SOCK_DRIVE_LISTEN).Mount(r)
 	})
 
 	mux.Get("/", web.Redirect(CGI_PATH, true))

@@ -1,7 +1,9 @@
+# yamllint disable rule:line-length
 services:
   xunlei:
     container_name: xunlei
-    image: cnk3x/xunlei:beta
+    # 本 fork 镜像(阿里云)，如需回退上游改回 cnk3x/xunlei:beta
+    image: crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:4.0.0-beta
     restart: unless-stopped
 
     # 宿主机名，迅雷远程控制的名称与此相关，会显示 `群晖-r66s`
@@ -43,3 +45,4 @@ services:
 
       # 可选，首次初始化，会从远程下载迅雷套件到此处，如果不配置每次重新创建都会重新从远程下载
       - ./cache:/xunlei/var/packages/pan-xunlei-com
+# yamllint enable rule:line-length
