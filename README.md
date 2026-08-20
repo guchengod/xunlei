@@ -62,10 +62,10 @@ git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
 
 #### 镜像
 
-本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快），内置**迅雷引擎 v3.23.5**（xunlei-pan-cli 3.23.5）：
+本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快）。镜像版本 **v1.1**（独立于迅雷引擎版本，内置迅雷引擎 v3.23.5，支持面板在线更新）：
 
 ```plain
-crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:3.23.5
+crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.1
 ```
 
 上游镜像（可作参考）：
