@@ -31,6 +31,7 @@ func (a *XLAPI) Mount(r chi.Router) {
 	r.Post("/download", a.addDownload)
 	r.Get("/dirs", a.dirs)
 	r.Get("/tasks", a.listTasks)
+	r.Get("/tasks/{id}/files", a.taskFiles)
 	r.Post("/tasks/{id}/action", a.taskAction)
 	r.Get("/login", a.loginState)
 }
@@ -347,6 +348,22 @@ func (a *XLAPI) listTasks(w http.ResponseWriter, r *http.Request) {
 	)
 
 	res, err := a.dc.Do(r.Context(), http.MethodGet, path, space, nil, nil)
+	if err != nil {
+		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
+		return
+	}
+	writeJSON(w, res.Status, res.Raw())
+}
+
+// taskFiles GET /api/v1/tasks/{id}/files
+// 获取该任务解析出的下载文件列表(磁力/种子文件树)。
+// 对应页面新增下载时「获取磁力详细文件信息」那一步, 返回 list.resources。
+func (a *XLAPI) taskFiles(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	space := a.spaceOf(r.URL.Query().Get("space"))
+	typ := a.taskTypeOf(r.Context(), space, id)
+	body := map[string]any{"space": space, "id": id, "type": typ}
+	res, err := a.dc.Do(r.Context(), http.MethodPost, "/drive/v1/resource/list", space, body, nil)
 	if err != nil {
 		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
 		return

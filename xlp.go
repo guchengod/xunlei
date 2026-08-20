@@ -240,7 +240,7 @@ func ensureDevNodes() {
 }
 
 func mockEnv(dirData, dirDownload string) []string {
-	// ld_lib := os.Getenv("LD_LIBRARY_PATH")
+	// 历史遗留: 不再注入 LD_LIBRARY_PATH (静态链接)
 	return append(os.Environ(),
 		"SYNOPLATFORM="+SYNO_PLATFORM,
 		"SYNOPKG_PKGNAME="+SYNOPKG_PKGNAME,

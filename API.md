@@ -18,8 +18,9 @@ xlp 内置一套供外部程序(Agent / Skill / 脚本)调用的 JSON API, 用�
 | GET | `/api/v1/info` | 设备配置、下载目录、登录态、用户信息 |
 | GET | `/api/v1/dirs` | 列出可下载目录树 (选择保存位置) |
 | GET | `/api/v1/login` | 登录状态 (`logged_in`) |
-| POST | `/api/v1/download` | 添加下载任务 (URL / magnet / 种子等) |
+| POST | `/api/v1/download` | 添加下载任务 (URL / magnet / 种子等，自动开始) |
 | GET | `/api/v1/tasks` | 任务列表 (支持 `all=1` 看全部) |
+| GET | `/api/v1/tasks/{id}/files` | 获取任务解析出的下载文件列表 (磁力/种子文件树) |
 | POST | `/api/v1/tasks/{id}/action` | 暂停 / 恢复 / 删除任务 |
 
 ## 可下载目录
