@@ -1,36 +1,24 @@
 # 迅雷远程下载服务(非官方)
 
-[![GitHub Stars][1]][2] [![Docker Pulls][3]][5] [![Docker Version][4]][5]
+[![GitHub Stars][1]][2]
 
-[1]: https://img.shields.io/github/stars/cnk3x/xunlei?style=flat
-[2]: https://star-history.com/#cnk3x/xunlei&Date
-[3]: https://img.shields.io/docker/pulls/cnk3x/xunlei.svg
-[4]: https://img.shields.io/docker/v/cnk3x/xunlei
-[5]: https://hub.docker.com/r/cnk3x/xunlei
-
-> **本仓库为 [cnk3x/xunlei](https://github.com/cnk3x/xunlei) 的 fork**
->
-> fork 自 [https://github.com/cnk3x/xunlei.git](https://github.com/cnk3x/xunlei.git)，用于研究、学习与个人使用的二次开发。
-> 感谢原作者 [cnk3x](https://github.com/cnk3x) 及其贡献者，本仓库保留上游全部功能与文档。
-
-本 fork 在上游基础上的主要改动：
-
-- 新增对外 **HTTP API**（详见 [API.md](API.md)）：`POST /api/v1/download` 添加下载任务、任务列表/暂停/恢复/删除、登录态与设备信息查询，方便 Agent / Skill 自动化操作；
-- 面板登录保护改为可选：仅设置 `XL_DASHBOARD_PASSWORD`（`--dashboard_password`）时才启用用户名密码，未设置则直接开放（直达迅雷扫码登录）；
-- 修复 index.cgi 登录态校验在部分容器（glibc < 2.34，如 ubuntu:focal）中失败的问题（将嵌入的 `authenticate_cgi` 改为静态编译）；
-- 非 Linux 平台（如 macOS 开发机）可正常编译本项目。
+[1]: https://img.shields.io/github/stars/guchengod/xunlei?style=flat
+[2]: https://star-history.com/#guchengod/xunlei&Date
 
 从迅雷群晖套件中提取出来用于其他设备的迅雷远程下载服务程序。仅供研究学习测试。 \
 本程序仅提供 Linux 模拟和容器化运行环境，未对原版迅雷程序进行任何修改。
 
-**3.20 版本介绍在此: (<https://github.com/cnk3x/xunlei/tree/v3.20.2>)**
-
 ## 特性
 
 - 支持本地运行和容器化运行
-- 重构了运行环境，有比较完善的回滚流程。
-- 容器镜像基于busybox，不再内嵌SPK，改成从远程下载，大幅减小了镜像体积(50M->5M)。
-- 不再内嵌SPK，不在受镜像包的luncher限制，理论上随时可以使用任何指定的版本。
+- 重构的远程下载运行环境，具备比较完善的回滚流程
+- 容器镜像基于 busybox，SPK 运行时从远程下载，镜像体积小，可随时指定迅雷引擎版本
+- **对外 HTTP API**（详见 [API.md](API.md)）：添加下载任务（支持按分类目录保存）、任务列表、暂停/恢复/删除、可下载目录树与登录态查询，方便 Agent / Skill 自动化
+- **内置 Agent Skill**（`skills/xunlei-download/`，符合 Agent Skills 标准）：任何支持该标准的 agent 可一键安装、自动操作下载
+- 面板登录保护可选：仅设置 `XL_DASHBOARD_PASSWORD` 才启用用户名密码，默认直接开放（直达迅雷扫码登录）
+- 兼容性修复：嵌入的 authenticate_cgi 改为静态编译，兼容 glibc < 2.34 的容器（如 ubuntu:focal）
+- 跨平台开发：非 Linux 主机也可编译本项目
+- 镜像已发布到阿里云容器镜像服务（国内拉取更快），内置迅雷引擎 v3.23.5
 
 ## Agent / Skill 自动化
 
@@ -193,4 +181,10 @@ services:
 
       # 可选，首次初始化，会从远程下载迅雷套件到此处，如果不配置每次重新创建都会重新从远程下载
       - ./cache:/xunlei/var/packages/pan-xunlei-com
+
+## 上游与本仓库的关系
+
+本仓库是基于 [cnk3x/xunlei](https://github.com/cnk3x/xunlei)（fork 自 <https://github.com/cnk3x/xunlei.git>）的 fork，用于研究、学习与个人使用，保留上游全部功能；感谢原作者 [cnk3x](https://github.com/cnk3x) 及其贡献者。
+
+上游历史版本：3.20 版本介绍见 <https://github.com/cnk3x/xunlei/tree/v3.20.2>。
 ```
