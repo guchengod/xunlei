@@ -16,6 +16,7 @@ artifacts/
 
 # python lint 缓存
 .ruff_cache/
+__pycache__/
 
 # docker compose 运行时数据(登录态/下载缓存), 不入库
 /data/

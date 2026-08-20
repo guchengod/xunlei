@@ -65,7 +65,7 @@ def request(
         obj = {"raw": raw.decode("utf-8", "replace")}
 
     print(json.dumps(obj, ensure_ascii=False, indent=2))
-    if code >= 400 or (isinstance(obj, dict) and obj.get("error") and code != 200):
+    if code >= 400 or (isinstance(obj, dict) and obj.get("error")):
         sys.exit(1)
     return obj
 
@@ -136,7 +136,10 @@ def main():
     )
 
     args = p.parse_args()
-    sys.exit(args.fn(args))
+    # 子命令成功时返回的是服务端 JSON 对象，不能把它传给 sys.exit：
+    # Python 会把任何非整数对象视为错误消息，并以状态码 1 退出。
+    # request() 已在网络、HTTP 和业务错误时显式 sys.exit(1)。
+    args.fn(args)
 
 
 if __name__ == "__main__":

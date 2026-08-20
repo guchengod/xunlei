@@ -7,6 +7,7 @@
 package drive
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -133,61 +134,63 @@ func (c *Client) Do(ctx context.Context, method, path string, space string, body
 		return nil, err
 	}
 
-	var rd io.Reader
+	var bodyBytes []byte
 	if body != nil {
-		b, e := json.Marshal(body)
-		if e != nil {
-			return nil, fmt.Errorf("drive: marshal body: %w", e)
+		bodyBytes, err = json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("drive: marshal body: %w", err)
 		}
-		rd = strings.NewReader(string(b))
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, "http://localhost"+path, rd)
+	do := func(auth string) (*Result, error) {
+		var rd io.Reader
+		if bodyBytes != nil {
+			rd = bytes.NewReader(bodyBytes)
+		}
+		req, e := http.NewRequestWithContext(ctx, method, "http://localhost"+path, rd)
+		if e != nil {
+			return nil, e
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("pan-auth", auth)
+		req.Header.Set("Device-Space", space)
+		if q := req.URL.Query(); space != "" {
+			q.Set("device_space", space)
+			req.URL.RawQuery = q.Encode()
+		}
+
+		resp, e := c.hc.Do(req)
+		if e != nil {
+			return nil, fmt.Errorf("drive: %s %s: %w", method, path, e)
+		}
+		defer resp.Body.Close()
+		b, e := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+		if e != nil {
+			return nil, fmt.Errorf("drive: read resp: %w", e)
+		}
+		return &Result{Status: resp.StatusCode, Body: b}, nil
+	}
+
+	r, err := do(tok)
 	if err != nil {
 		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("pan-auth", tok)
-	req.Header.Set("Device-Space", space)
-	if q := req.URL.Query(); space != "" {
-		q.Set("device_space", space)
-		req.URL.RawQuery = q.Encode()
-	}
-
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("drive: %s %s: %w", method, path, err)
-	}
-	defer resp.Body.Close()
-
-	b, e := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
-	if e != nil {
-		return nil, fmt.Errorf("drive: read resp: %w", e)
-	}
-
-	r := &Result{Status: resp.StatusCode, Body: b}
-	if out != nil && len(b) > 0 {
-		if err := json.Unmarshal(b, out); err != nil {
-			slog.DebugContext(ctx, "drive: unmarshal resp fail", "path", path, "body", truncate(b, 512))
-		}
 	}
 
 	// 仅当是 uiauth token 校验失败(403 checkAuth/permission_deny)时才刷新并重试;
 	// 401 通常是账户未登录(refresh token not found), 重试无意义且会翻倍延迟。
-	if resp.StatusCode == http.StatusForbidden && strings.Contains(string(b), "checkAuth") {
+	if r.Status == http.StatusForbidden && strings.Contains(string(r.Body), "checkAuth") {
 		c.mu.Lock()
 		c.tok = ""
 		c.mu.Unlock()
 		if tok2, e := c.token(ctx); e == nil && tok2 != "" {
-			req.Header.Set("pan-auth", tok2)
-			if resp2, e2 := c.hc.Do(req); e2 == nil {
-				defer resp2.Body.Close()
-				b2, _ := io.ReadAll(io.LimitReader(resp2.Body, 32<<20))
-				r = &Result{Status: resp2.StatusCode, Body: b2}
-				if out != nil && len(b2) > 0 {
-					_ = json.Unmarshal(b2, out)
-				}
+			if retried, e2 := do(tok2); e2 == nil {
+				r = retried
 			}
+		}
+	}
+	if out != nil && len(r.Body) > 0 {
+		if err := json.Unmarshal(r.Body, out); err != nil {
+			slog.DebugContext(ctx, "drive: unmarshal resp fail", "path", path, "body", truncate(r.Body, 512))
 		}
 	}
 

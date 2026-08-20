@@ -3,7 +3,7 @@ package xunlei
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,7 +17,11 @@ import (
 )
 
 type XLAPI struct {
-	dc *drive.Client // 引擎(sock) 客户端
+	dc driveDoer // 引擎(sock) 客户端
+}
+
+type driveDoer interface {
+	Do(context.Context, string, string, string, any, any) (*drive.Result, error)
 }
 
 // NewAPI 创建对外 API。sock 为引擎主程序 unix socket 路径(chroot 视角)。
@@ -47,6 +51,19 @@ func (a *XLAPI) err(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, mustJSON(map[string]any{"error": msg, "success": false}))
 }
 
+// writeDriveFailure 保留引擎原始错误体，同时确保调用方能通过 HTTP 状态识别失败。
+func writeDriveFailure(w http.ResponseWriter, res *drive.Result) bool {
+	if res == nil || (res.Status < http.StatusBadRequest && res.Error() == "") {
+		return false
+	}
+	status := res.Status
+	if status < http.StatusBadRequest {
+		status = http.StatusBadGateway
+	}
+	writeJSON(w, status, res.Raw())
+	return true
+}
+
 func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
@@ -67,60 +84,219 @@ func magnetDisplayName(u string) string {
 	return after
 }
 
-// spaceOf: 仅当调用方显式传入 space 时才使用; 否则留空, 由引擎按设备空间解析。
-// 注意: 不要回填 device_id# 空间 —— 设备空间未激活时会触发 device_space_not_active,
-// 空 space 引擎反而能正确解析(实测)。创建任务后置 running 用创建响应里的 task.space。
-func (a *XLAPI) spaceOf(space string) string {
-	return space
+type driveFolder struct {
+	ID       string `json:"id"`
+	ParentID string `json:"parent_id"`
+	Name     string `json:"name"`
+	Params   struct {
+		AliasPath string `json:"AliasPath"`
+		RealPath  string `json:"RealPath"`
+	} `json:"params"`
 }
 
-// vfsFolder 探测设备本地下载根目录: 返回 (目录id, 路径)。
+func normalizedFolderPath(p string) string {
+	if strings.TrimSpace(p) == "" {
+		return ""
+	}
+	return strings.TrimRight(path.Clean(p), "/") + "/"
+}
+
+func folderRealPath(folder driveFolder) string {
+	if p := normalizedFolderPath(folder.Params.RealPath); p != "" {
+		return p
+	}
+	return normalizedFolderPath(folder.Params.AliasPath)
+}
+
+// driveFolders 与面板的目录选择器一致，通过 drive/v1/files 获取目录身份。
+// device/v1/vfs 返回的是挂载身份，不能作为下载任务的 parent_folder_id。
+func (a *XLAPI) driveFolders(ctx context.Context, space, parentID string) ([]driveFolder, error) {
+	filters, _ := json.Marshal(map[string]any{"kind": map[string]string{"eq": "drive#folder"}})
+	q := url.Values{}
+	q.Set("space", space)
+	q.Set("limit", "200")
+	q.Set("parent_id", parentID)
+	q.Set("filters", string(filters))
+	q.Set("page_token", "")
+	q.Add("with", "withCategoryDiskMountPath")
+	q.Add("with", "withCategoryDownloadPath")
+
+	var out struct {
+		Files []driveFolder `json:"files"`
+	}
+	res, err := a.dc.Do(ctx, http.MethodGet, "/drive/v1/files?"+q.Encode(), "", nil, &out)
+	if err != nil {
+		return nil, err
+	}
+	if res.Status != http.StatusOK || res.Error() != "" {
+		return nil, fmt.Errorf("迅雷目录查询失败: %s", resErr(res))
+	}
+	return out.Files, nil
+}
+
+// vfsFolder 探测设备本地下载根目录: 返回面板使用的 (drive 目录 id, 路径)。
 // parent_folder_id/path 是任务真正开始下载的必要字段。
-func (a *XLAPI) vfsFolder(ctx context.Context) (id, path string) {
+func (a *XLAPI) vfsFolder(ctx context.Context, space string) (id, folderPath string, err error) {
 	var cfg struct {
 		DownloadPaths []string `json:"download_paths"`
 	}
-	if _, err := a.dc.Do(ctx, http.MethodGet, "/device/config", "", nil, &cfg); err == nil && len(cfg.DownloadPaths) > 0 {
-		path = strings.TrimRight(cfg.DownloadPaths[0], "/") + "/"
+	if _, callErr := a.dc.Do(ctx, http.MethodGet, "/device/config", "", nil, &cfg); callErr == nil && len(cfg.DownloadPaths) > 0 {
+		folderPath = normalizedFolderPath(cfg.DownloadPaths[0])
 	}
-	var vfs struct {
-		List []struct {
-			FileID string `json:"file_id"`
-		} `json:"vfs_list"`
+	if folderPath == "" {
+		return "", "", fmt.Errorf("迅雷未返回有效下载目录")
 	}
-	if _, err := a.dc.Do(ctx, http.MethodGet, "/device/v1/vfs", "", nil, &vfs); err == nil && len(vfs.List) > 0 {
-		id = vfs.List[0].FileID
+
+	folders, err := a.driveFolders(ctx, space, "")
+	if err != nil {
+		return "", "", err
 	}
-	return
+	for _, folder := range folders {
+		if folderRealPath(folder) == folderPath {
+			return folder.ID, folderPath, nil
+		}
+	}
+	return "", "", fmt.Errorf("迅雷目录索引中未找到下载根目录 %s", folderPath)
 }
 
-// taskTypeOf 按 id 查任务的 type (PATCH 操作用)。
-func (a *XLAPI) taskTypeOf(ctx context.Context, space, id string) string {
+// descendantFolderID 按页面目录树逐级解析目标路径对应的 drive folder id。
+func (a *XLAPI) descendantFolderID(ctx context.Context, space, rootID, rootPath, dest string) (string, error) {
+	root := strings.TrimRight(normalizedFolderPath(rootPath), "/")
+	target := strings.TrimRight(normalizedFolderPath(dest), "/")
+	if target == root {
+		return rootID, nil
+	}
+	rel := strings.TrimPrefix(target, root+"/")
+	parentID, currentPath := rootID, root
+	for _, segment := range strings.Split(rel, "/") {
+		currentPath += "/" + segment
+		folders, err := a.driveFolders(ctx, space, parentID)
+		if err != nil {
+			return "", err
+		}
+		found := false
+		for _, folder := range folders {
+			if strings.TrimRight(folderRealPath(folder), "/") == currentPath || folder.Name == segment {
+				parentID = folder.ID
+				found = true
+				break
+			}
+		}
+		if !found {
+			return "", fmt.Errorf("迅雷目录索引中未找到 %s，请先在 dirs 中确认目录", currentPath)
+		}
+	}
+	return parentID, nil
+}
+
+type taskMeta struct {
+	Space  string `json:"space"`
+	Type   string `json:"type"`
+	Params struct {
+		URL string `json:"url"`
+	} `json:"params"`
+}
+
+// taskOf 按 id 查任务真实的 space/type/url。
+func (a *XLAPI) taskOf(ctx context.Context, space, id string) (taskMeta, *drive.Result, error) {
+	space = strings.TrimSpace(space)
+	if space == "" {
+		var err error
+		space, err = a.deviceSpace(ctx)
+		if err != nil {
+			return taskMeta{}, nil, err
+		}
+	}
 	f := map[string]any{"id": map[string]any{"in": id}}
 	fj, _ := json.Marshal(f)
 	p := "/drive/v1/tasks?" + drive.Query("space", space, "filters", string(fj))
 	var out struct {
-		Tasks []struct {
-			Type string `json:"type"`
-		} `json:"tasks"`
+		Tasks []taskMeta `json:"tasks"`
 	}
-	if res, err := a.dc.Do(ctx, http.MethodGet, p, space, nil, &out); err == nil && res.Status == 200 && len(out.Tasks) > 0 {
-		return out.Tasks[0].Type
+	// space 是任务查询条件；Device-Space/device_space 与当前面板一样保持空值。
+	res, err := a.dc.Do(ctx, http.MethodGet, p, "", nil, &out)
+	if err != nil || res.Status != http.StatusOK || len(out.Tasks) == 0 {
+		return taskMeta{}, res, err
 	}
-	return "user#download-url"
+	return out.Tasks[0], res, nil
 }
 
-// deviceSpace 解析设备离线下载空间(device_id#...)。
-// 注意: 引擎 /device/config 的 device_space 通常为空, 这里拿不到就不返回历史任务的过时 space(那样会 device_space_not_active),
-// 返回空串让引擎按当前登录设备的缺省空间自动解析。
-func (a *XLAPI) deviceSpace(ctx context.Context) string {
+// deviceSpace 从当前运行中的 user#runner 任务读取设备空间。
+// 迅雷面板使用 runner.params.target，而 /device/config.device_space 通常为空。
+func (a *XLAPI) deviceSpace(ctx context.Context) (string, error) {
+	var runners struct {
+		Tasks []struct {
+			Params struct {
+				Target string `json:"target"`
+			} `json:"params"`
+		} `json:"tasks"`
+	}
+	p := "/drive/v1/tasks?" + drive.Query("type", "user#runner")
+	res, err := a.dc.Do(ctx, http.MethodGet, p, "", nil, &runners)
+	if err != nil {
+		return "", err
+	}
+	if res.Status == http.StatusOK {
+		for _, runner := range runners.Tasks {
+			if target := strings.TrimSpace(runner.Params.Target); target != "" {
+				return target, nil
+			}
+		}
+	}
+
+	// 兼容少数会直接返回 device_space 的旧引擎。
 	var cfg struct {
 		DeviceSpace string `json:"device_space"`
 	}
 	if res, err := a.dc.Do(ctx, http.MethodGet, "/device/config", "", nil, &cfg); err == nil && res.Status == 200 && cfg.DeviceSpace != "" {
-		return cfg.DeviceSpace
+		return cfg.DeviceSpace, nil
 	}
-	return ""
+	return "", fmt.Errorf("当前迅雷设备空间未激活")
+}
+
+type parsedResource struct {
+	Name      string `json:"name"`
+	FileName  string `json:"file_name"`
+	FileSize  any    `json:"file_size"`
+	FileCount any    `json:"file_count"`
+	MimeType  string `json:"mime_type"`
+	FileID    string `json:"file_id"`
+}
+
+type resourceList struct {
+	ListID string `json:"list_id"`
+	List   struct {
+		Resources []parsedResource `json:"resources"`
+	} `json:"list"`
+}
+
+// parseDownload 与迅雷面板一致，先解析 URL/磁力，再用解析结果创建任务。
+func (a *XLAPI) parseDownload(ctx context.Context, rawURL string) (*drive.Result, resourceList, error) {
+	var parsed resourceList
+	res, err := a.dc.Do(ctx, http.MethodPost, "/drive/v1/resource/list", "", map[string]any{
+		"page_size": 2000,
+		"urls":      rawURL,
+	}, &parsed)
+	return res, parsed, err
+}
+
+func scalarString(v any, fallback string) string {
+	var s string
+	switch x := v.(type) {
+	case string:
+		s = x
+	case float64:
+		s = strconv.FormatFloat(x, 'f', -1, 64)
+	case json.Number:
+		s = x.String()
+	case nil:
+	default:
+		s = fmt.Sprint(x)
+	}
+	if strings.TrimSpace(s) == "" {
+		return fallback
+	}
+	return s
 }
 
 // info GET /api/v1/info
@@ -259,17 +435,40 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	space := req.Space
+	space := strings.TrimSpace(req.Space)
 	if space == "" {
-		// 设备离线下载需显式设备空间(device_id#...), 面板创建即如此; 否则引擎不解析磁力/不拿文件信息
-		space = a.deviceSpace(r.Context())
+		var err error
+		space, err = a.deviceSpace(r.Context())
+		if err != nil {
+			a.err(w, http.StatusServiceUnavailable, "获取当前迅雷设备空间失败: "+err.Error())
+			return
+		}
 	}
+
+	parseRes, parsed, err := a.parseDownload(r.Context(), req.URL)
+	if err != nil {
+		a.err(w, http.StatusBadGateway, "解析下载链接失败: "+err.Error())
+		return
+	}
+	if writeDriveFailure(w, parseRes) {
+		return
+	}
+	if len(parsed.List.Resources) == 0 {
+		a.err(w, http.StatusUnprocessableEntity, "迅雷未解析出可下载资源")
+		return
+	}
+	resource := parsed.List.Resources[0]
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
+		name = strings.TrimSpace(resource.Name)
+	}
+	if name == "" {
+		name = strings.TrimSpace(resource.FileName)
+	}
+	if name == "" {
 		switch {
 		case strings.HasPrefix(req.URL, "magnet:"), strings.HasPrefix(req.URL, "bt:"), strings.HasPrefix(req.URL, "ed2k:"):
-			// 磁力/种子的名称取自磁力里的 dn= 显示名(迅雷也据此/解析内容命名), 不再兜底成 download
 			name = magnetDisplayName(req.URL)
 		default:
 			if u, e := url.Parse(req.URL); e == nil && u.Path != "" {
@@ -278,16 +477,16 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if name == "" || name == "." || name == "/" {
-		if strings.HasPrefix(req.URL, "magnet:") {
-			name = "" // magnet 无 dn 时留空, 由引擎解析出最终名称
-		} else {
-			name = "download"
-		}
+		name = "unnamed"
 	}
 
 	// 目标目录: 用户指定 path(完整) > dir(下载根下的相对目录, 如 "电影/动漫") > 下载根目录。
 	// parent_folder_id/path 是关键字段, 缺省任务不会开始下载。
-	pfid, rootPath := a.vfsFolder(r.Context())
+	pfid, rootPath, err := a.vfsFolder(r.Context(), space)
+	if err != nil {
+		a.err(w, http.StatusServiceUnavailable, "获取下载目录失败: "+err.Error())
+		return
+	}
 
 	dest := strings.TrimSpace(req.Path)
 	if dest == "" && strings.TrimSpace(req.Dir) != "" {
@@ -306,59 +505,40 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 	pfpath := rootPath
 	if dest != "" {
 		pfpath = strings.TrimRight(dest, "/") + "/"
+		pfid, err = a.descendantFolderID(r.Context(), space, pfid, rootPath, dest)
+		if err != nil {
+			a.err(w, http.StatusUnprocessableEntity, "获取目标目录失败: "+err.Error())
+			return
+		}
 	}
 
 	body := map[string]any{
 		"type":      "user#download-url",
 		"name":      name,
 		"file_name": name,
-		"file_size": "0",
+		"file_size": scalarString(resource.FileSize, "0"),
 		"space":     space,
 		"params": map[string]any{
 			"target":             space,
 			"url":                req.URL,
-			"total_file_count":   "1",
+			"total_file_count":   scalarString(resource.FileCount, "1"),
 			"parent_folder_path": pfpath,
 			"parent_folder_id":   pfid,
-			"mime_type":          "",
-			"file_id":            "",
+			"sub_file_index":     "--1,",
+			"mime_type":          resource.MimeType,
+			"file_id":            resource.FileID,
 		},
 	}
 
-	res, err := a.dc.Do(r.Context(), http.MethodPost, "/drive/v1/task", space, body, nil)
+	// 当前面板只在 body 中传 space/target，传输层 Device-Space/device_space 保持空值。
+	res, err := a.dc.Do(r.Context(), http.MethodPost, "/drive/v1/task", "", body, nil)
 	if err != nil {
 		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
 		return
 	}
 
-	if e := res.Error(); e != "" && res.Status != 200 {
-		a.err(w, http.StatusOK, e)
+	if writeDriveFailure(w, res) {
 		return
-	}
-
-	// 创建成功: 自动开始下载 (面板流程也是创建后立即置 running)
-	var created struct {
-		Task struct {
-			ID    string `json:"id"`
-			Space string `json:"space"`
-			Phase string `json:"phase"`
-		} `json:"task"`
-	}
-	_ = json.Unmarshal(res.Raw(), &created)
-	if created.Task.ID != "" && created.Task.Phase != "PHASE_TYPE_RUNNING" {
-		// 置 running 用创建响应回填的 device space (device_id#...)
-		sp := created.Task.Space
-		if sp == "" {
-			sp = space
-		}
-		spec := []byte(`{"phase":"running"}`) // 引擎的 spec 是 bytes 字段, 会自动 base64
-		act := map[string]any{
-			"space": sp, "type": "user#download-url", "id": created.Task.ID,
-			"set_params": map[string]any{"spec": spec},
-		}
-		if ra, e := a.dc.Do(r.Context(), http.MethodPatch, "/drive/v1/task", sp, act, nil); e == nil {
-			slog.DebugContext(r.Context(), "api: auto start task", "id", created.Task.ID, "code", ra.Status)
-		}
 	}
 
 	writeJSON(w, res.Status, res.Raw())
@@ -366,8 +546,15 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 
 // listTasks GET /api/v1/tasks?all=1&page_token=&limit=
 func (a *XLAPI) listTasks(w http.ResponseWriter, r *http.Request) {
-	// 不强制 space: 引擎默认解析到设备空间
-	space := a.spaceOf(r.URL.Query().Get("space"))
+	space := strings.TrimSpace(r.URL.Query().Get("space"))
+	if space == "" {
+		var err error
+		space, err = a.deviceSpace(r.Context())
+		if err != nil {
+			a.err(w, http.StatusServiceUnavailable, "获取当前迅雷设备空间失败: "+err.Error())
+			return
+		}
+	}
 	limit := r.URL.Query().Get("limit")
 	if limit == "" {
 		limit = "100"
@@ -389,9 +576,12 @@ func (a *XLAPI) listTasks(w http.ResponseWriter, r *http.Request) {
 		"limit", limit,
 	)
 
-	res, err := a.dc.Do(r.Context(), http.MethodGet, path, space, nil, nil)
+	res, err := a.dc.Do(r.Context(), http.MethodGet, path, "", nil, nil)
 	if err != nil {
 		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
+		return
+	}
+	if writeDriveFailure(w, res) {
 		return
 	}
 	writeJSON(w, res.Status, res.Raw())
@@ -402,24 +592,28 @@ func (a *XLAPI) listTasks(w http.ResponseWriter, r *http.Request) {
 // 对应页面新增下载时「获取磁力详细文件信息」那一步, 返回 list.resources。
 func (a *XLAPI) taskFiles(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	// 先按 id 拿任务的真实空间与类型(space 为空让引擎按设备空间解析)
-	var found struct {
-		Tasks []struct {
-			Space string `json:"space"`
-			Type  string `json:"type"`
-		} `json:"tasks"`
+	task, res, err := a.taskOf(r.Context(), strings.TrimSpace(r.URL.Query().Get("space")), id)
+	if err != nil {
+		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
+		return
 	}
-	fj, _ := json.Marshal(map[string]any{"id": map[string]any{"in": id}})
-	if res, err := a.dc.Do(r.Context(), http.MethodGet, "/drive/v1/tasks?"+drive.Query("filters", string(fj)), "", nil, &found); err != nil || res.Status != 200 || len(found.Tasks) == 0 {
+	if writeDriveFailure(w, res) {
+		return
+	}
+	if task.Type == "" {
 		a.err(w, http.StatusNotFound, "task not found")
 		return
 	}
-	space := found.Tasks[0].Space
-	typ := found.Tasks[0].Type
-	body := map[string]any{"space": space, "id": id, "type": typ}
-	res, err := a.dc.Do(r.Context(), http.MethodPost, "/drive/v1/resource/list", space, body, nil)
+	if strings.TrimSpace(task.Params.URL) == "" {
+		a.err(w, http.StatusUnprocessableEntity, "task has no downloadable url")
+		return
+	}
+	res, _, err = a.parseDownload(r.Context(), task.Params.URL)
 	if err != nil {
 		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
+		return
+	}
+	if writeDriveFailure(w, res) {
 		return
 	}
 	writeJSON(w, res.Status, res.Raw())
@@ -437,34 +631,47 @@ func (a *XLAPI) taskAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 操作目标空间: 显式 / 最近创建任务 / 空(引擎默认) 均可
-	space := a.spaceOf(r.URL.Query().Get("space"))
-	// 任务的真实 type (PATCH 需要, 否则引擎不认)
-	typ := a.taskTypeOf(r.Context(), space, id)
+	requestedSpace := strings.TrimSpace(r.URL.Query().Get("space"))
+	task, lookupRes, lookupErr := a.taskOf(r.Context(), requestedSpace, id)
+	if lookupErr != nil {
+		a.err(w, http.StatusBadGateway, "drive call fail: "+lookupErr.Error())
+		return
+	}
+	if writeDriveFailure(w, lookupRes) {
+		return
+	}
+	if task.Type == "" {
+		a.err(w, http.StatusNotFound, "task not found")
+		return
+	}
+	space, typ := task.Space, task.Type
 
 	var err error
 	var res *drive.Result
-	switch strings.ToLower(req.Action) {
-	case "pause", "running", "stop":
+	action := strings.ToLower(strings.TrimSpace(req.Action))
+	switch action {
+	case "pause", "stop", "resume", "running":
 		phase := "pause"
-		if req.Action == "running" {
+		if action == "resume" || action == "running" {
 			phase = "running"
 		}
 		body := map[string]any{
 			"space": space, "type": typ, "id": id,
-			"set_params": map[string]any{"spec": mustJSON(map[string]string{"phase": phase})},
+			"set_params": map[string]any{"spec": string(mustJSON(map[string]string{"phase": phase}))},
 		}
-		res, err = a.dc.Do(r.Context(), http.MethodPatch, "/drive/v1/task", space, body, nil)
+		res, err = a.dc.Do(r.Context(), http.MethodPatch, "/drive/v1/task", "", body, nil)
 	case "delete":
-		// 删除不传 space(实测带 space 反而报无效空间)
-		p := "/drive/v1/tasks?" + drive.Query("task_ids", id)
-		res, err = a.dc.Do(r.Context(), http.MethodDelete, p, space, nil, nil)
+		p := "/drive/v1/tasks?" + drive.Query("space", space, "task_ids", id)
+		res, err = a.dc.Do(r.Context(), http.MethodDelete, p, "", nil, nil)
 	default:
 		a.err(w, http.StatusBadRequest, "action 必须是 pause/resume/delete")
 		return
 	}
 	if err != nil {
 		a.err(w, http.StatusBadGateway, "drive call fail: "+err.Error())
+		return
+	}
+	if writeDriveFailure(w, res) {
 		return
 	}
 	writeJSON(w, res.Status, res.Raw())

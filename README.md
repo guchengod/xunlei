@@ -62,7 +62,7 @@ git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
 #### 镜像
 
 ```plain
-crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.4
+crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.5
 ```
 
 #### 权限要求
