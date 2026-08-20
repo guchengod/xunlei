@@ -110,21 +110,15 @@ func (a *XLAPI) taskTypeOf(ctx context.Context, space, id string) string {
 	return "user#download-url"
 }
 
-// deviceSpace 解析设备离线下载空间(device_id#...), 面板创建任务的 space/target 即此值。
+// deviceSpace 解析设备离线下载空间(device_id#...)。
+// 注意: 引擎 /device/config 的 device_space 通常为空, 这里拿不到就不返回历史任务的过时 space(那样会 device_space_not_active),
+// 返回空串让引擎按当前登录设备的缺省空间自动解析。
 func (a *XLAPI) deviceSpace(ctx context.Context) string {
 	var cfg struct {
 		DeviceSpace string `json:"device_space"`
 	}
 	if res, err := a.dc.Do(ctx, http.MethodGet, "/device/config", "", nil, &cfg); err == nil && res.Status == 200 && cfg.DeviceSpace != "" {
 		return cfg.DeviceSpace
-	}
-	var out struct {
-		Tasks []struct {
-			Space string `json:"space"`
-		} `json:"tasks"`
-	}
-	if res, err := a.dc.Do(ctx, http.MethodGet, "/drive/v1/tasks?limit=1", "", nil, &out); err == nil && res.Status == 200 && len(out.Tasks) > 0 && out.Tasks[0].Space != "" {
-		return out.Tasks[0].Space
 	}
 	return ""
 }
