@@ -30,13 +30,10 @@ func Before(before func(ctx context.Context) (undo func(), err error)) Option {
 
 func Basic(ro *options) {
 	ro.mounts = append(ro.mounts,
-		// 挂载proc文件系统（必须）
-		sys.MountOptions{Target: filepath.Join(ro.root, "proc"), Source: "proc", Fstype: "proc"},
-		// 挂载devtmpfs到/dev（提供基础设备节点）
-		sys.MountOptions{Target: filepath.Join(ro.root, "dev"), Source: "devtmpfs", Fstype: "devtmpfs", Data: "mode=0755"}, //tmpfs
-		// 挂载sysfs文件系统（可选，但建议挂载）
+		// proc/dev 挂载优先; 平台受限(如飞牛禁止 privileged)时失败会自动跳过降级, 不阻塞启动
+		sys.MountOptions{Target: filepath.Join(ro.root, "proc"), Source: "proc", Fstype: "proc", Optional: true},
+		sys.MountOptions{Target: filepath.Join(ro.root, "dev"), Source: "devtmpfs", Fstype: "devtmpfs", Data: "mode=0755", Optional: true}, //tmpfs
 		sys.MountOptions{Target: filepath.Join(ro.root, "sys"), Source: "sysfs", Fstype: "sysfs", Optional: true},
-		// 挂载tmpfs到/tmp（临时目录，可选）
 		sys.MountOptions{Target: filepath.Join(ro.root, "tmp"), Source: "tmpfs", Fstype: "tmpfs", Data: "mode=0777,size=100m", Optional: true},
 	)
 }

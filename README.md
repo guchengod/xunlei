@@ -61,20 +61,19 @@ git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
 
 #### 镜像
 
-
 ```plain
 crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.1
 ```
 
-#### 权限要求（务必满足）
+#### 权限要求
 
-容器必须以**特权模式**运行才能挂载 proc/dev 并 chroot，否则启动会报 `permission denied` 直接退出（飞牛/群晖等 NAS 部署最容易遇到）：
+容器需能**挂载 proc/dev 并 chroot**，否则将退化运行（跳过挂载）。按优先级：
 
-- 推荐：`privileged: true`
-- 或：`cap_add: [SYS_ADMIN]` 且 `security_opt: [seccomp=unconfined]`（仅 SYS_ADMIN 不够，Docker 默认 seccomp 会拦截容器内 mount）
+1. 推荐：`privileged: true`（若平台允许）；
+2. 若平台（如飞牛 fnOS）**禁止 privileged**：用 `cap_add: [SYS_ADMIN]`；
+3. 若均不可用：本程序已做**降级**——挂载失败自动跳过继续启动，但功能完整度取决于平台（缺少 /proc、/dev 时部分能力可能受限）。
 
-仓库根目录的 [`docker-compose.yaml`](docker-compose.yaml) 已按 `privileged: true` 配置好，直接使用即可。
-
+飞牛等 NAS 部署请按上面 2/3 处理，仓库根目录 [`docker-compose.yaml`](docker-compose.yaml) 默认使用 `cap_add: [SYS_ADMIN]`。
 
 #### 参数
 
