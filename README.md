@@ -36,12 +36,16 @@
 
 ## Agent / Skill 自动化
 
-本仓库自带一个 Agent Skill（`.pi/skills/xunlei-download/`），让 pi / 其它 Agent 可以直接通过 HTTP API 帮你**添加下载、管理任务**，适合自动化（例如收到链接自动拉取）。接口完整说明见 [API.md](API.md)。
+本仓库自带一个 Agent Skill（`skills/xunlei-download/`），让 pi / 其它 Agent 可以直接通过 HTTP API 帮你**添加下载、管理任务**，适合自动化（例如收到链接自动拉取）。接口完整说明见 [API.md](API.md)。
 
 ### Skill 位置与加载
 
-- pi 会在项目目录自动发现 `.pi/skills/xunlei-download/`（项目需被信任）
-- 手动调用：`/skill:xunlei-download`；或直接运行脚本 `./.pi/skills/xunlei-download/scripts/xunlei.py ...`
+- skill 位于仓库根目录 `skills/xunlei-download/`（遵循 Agent Skills 标准结构，可被任何支持该标准的工具加载）。
+- 在 pi 中使用（pi 默认扫描 `~/.pi/skills/`、`.agents/skills/`，仓库根 `skills/` 需显式引入）：
+  - 复制或软链到 `~/.pi/skills/xunlei-download/`（全局），或 `.agents/skills/xunlei-download/`（项目级）；
+  - 或在 `settings.json` 的 `skills` 数组里引用本仓库 `skills/xunlei-download`；
+  - 之后即可 `/skill:xunlei-download` 调用。
+- 不依赖 skill 加载时，可直接运行脚本 `./skills/xunlei-download/scripts/xunlei.py ...`。
 
 ### 脚本用法（依赖 Python 3 标准库）
 
@@ -50,21 +54,21 @@ export XL_HOST=http://your-nas:2345      # 服务地址, 默认 http://localhost
 # export XL_AUTH=user:pass               # 仅当设置了 XL_DASHBOARD_PASSWORD 时
 
 # 查看可下载目录树（Docker 挂载目录、电影/动漫等分类都在这里）
-./.pi/skills/xunlei-download/scripts/xunlei.py dirs
+./skills/xunlei-download/scripts/xunlei.py dirs
 
 # 添加磁力链下载（自动开始）
-./.pi/skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --name "电影"
+./skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --name "电影"
 # 按分类保存到 /downloads/动漫/2025/（目录不存在会自动创建）
-./.pi/skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --dir "动漫/2025"
+./skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --dir "动漫/2025"
 
 # 任务列表（--all 看全部）/ 暂停 / 恢复 / 删除
-./.pi/skills/xunlei-download/scripts/xunlei.py list --all
-./.pi/skills/xunlei-download/scripts/xunlei.py pause <task_id>
-./.pi/skills/xunlei-download/scripts/xunlei.py delete <task_id>
+./skills/xunlei-download/scripts/xunlei.py list --all
+./skills/xunlei-download/scripts/xunlei.py pause <task_id>
+./skills/xunlei-download/scripts/xunlei.py delete <task_id>
 
 # 设备信息 / 登录态
-./.pi/skills/xunlei-download/scripts/xunlei.py info
-./.pi/skills/xunlei-download/scripts/xunlei.py login
+./skills/xunlei-download/scripts/xunlei.py info
+./skills/xunlei-download/scripts/xunlei.py login
 ```
 
 > 分类放置：Agent 可先用 `dirs` 拿到实际目录，再按内容类型（剧集/电影/动漫/音乐/其他）匹配子目录，或按用户指定的 `--dir`/`--path` 保存；未指定则落到下载根目录。

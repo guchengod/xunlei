@@ -13,3 +13,6 @@ test_data/
 /amd64/
 artifacts/
 /lib
+
+# python lint 缓存
+.ruff_cache/

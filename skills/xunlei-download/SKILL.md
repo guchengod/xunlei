@@ -1,11 +1,14 @@
 ---
 name: xunlei-download
-description: 通过 xunlei/xlp 提供的本地 HTTP API (/api/v1) 自动化迅雷下载。用于当用户需要添加 magnet/磁力/BT/HTTP 下载任务、查询任务状态、暂停/恢复/删除任务，或检查迅雷登录态/设备信息时。适用于本仓库部署的迅雷远程下载服务 (默认端口 2345)。
+description: 通过 xunlei/xlp 提供的本地 HTTP API (/api/v1) 自动化迅雷下载。用于当用户需要添加 magnet/磁力/BT/HTTP 下载任务、指定保存分类目录、查询任务状态、暂停/恢复/删除任务、查看可下载目录，或检查迅雷登录态/设备信息时。适用于本仓库部署的迅雷远程下载服务 (默认端口 2345)。
+license: MIT
+metadata:
+  version: 1.0.0
 ---
 
 # 迅雷下载 (xunlei-download)
 
-自动化操作本仓库部署的**迅雷远程下载服务 (xlp)** 的对外 HTTP API。核心接口见 [API.md](../../../API.md)。
+自动化操作本仓库部署的**迅雷远程下载服务 (xlp)** 的对外 HTTP API。核心接口见 [API.md](../../API.md)。
 
 ## 前置条件
 
