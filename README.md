@@ -67,13 +67,13 @@ crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.3
 
 #### 权限要求
 
-容器需能**挂载 proc/dev 并 chroot**，否则将退化运行（跳过挂载）。按优先级：
+容器需能**挂载 proc/dev 并 chroot**，否则将退化运行（跳过挂载）。按平台选择：
 
-1. 推荐：`privileged: true`（若平台允许）；
-2. 若平台（如飞牛 fnOS）**禁止 privileged**：用 `cap_add: [SYS_ADMIN]`；
-3. 若均不可用：本程序已做**降级**——挂载失败自动跳过继续启动，但功能完整度取决于平台（缺少 /proc、/dev 时部分能力可能受限）。
+1. **推荐（完整功能）— 特权模式**：注意部分平台（如飞牛 fnOS）**不允许在 `docker-compose.yaml` 里写 `privileged: true`**（会被忽略/报错），但可以在**容器图形界面里勾选“特权模式”**，效果等同；
+2. 无法开特权：`cap_add: [SYS_ADMIN]`；
+3. 均不可用：本程序已做**降级**——挂载失败自动跳过继续启动，但功能完整度取决于平台（缺 /proc、/dev 时部分能力受限）。
 
-飞牛等 NAS 部署请按上面 2/3 处理，仓库根目录 [`docker-compose.yaml`](docker-compose.yaml) 默认使用 `cap_add: [SYS_ADMIN]`。
+仓库 [`docker-compose.yaml`](docker-compose.yaml) 默认用 `cap_add: [SYS_ADMIN]`（避免部分平台拒绝特权关键字）；飞牛等平台建议在**部署界面勾选特权模式**以获得完整能力。
 
 #### 参数
 
