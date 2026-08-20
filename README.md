@@ -87,13 +87,13 @@ export XL_HOST=http://your-nas:2345      # 服务地址, 默认 http://localhost
 
 #### 镜像
 
-本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快）：
+本 fork 已发布镜像（阿里云容器镜像服务，国内拉取更快），内置**迅雷引擎 v3.23.5**（xunlei-pan-cli 3.23.5）：
 
 ```plain
-crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:4.0.0-beta
+crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:3.23.5
 ```
 
-上游镜像（如需回退，[docker-compose.yaml](docker-compose.yaml) 中也已注释说明）：
+上游镜像（可作参考）：
 
 ```plain
 cnk3x/xunlei:beta

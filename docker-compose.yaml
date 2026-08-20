@@ -2,8 +2,8 @@
 services:
   xunlei:
     container_name: xunlei
-    # 本 fork 镜像(阿里云)，如需回退上游改回 cnk3x/xunlei:beta
-    image: crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:4.0.0-beta
+    # 本 fork 镜像(阿里云, 迅雷引擎 v3.23.5)
+    image: crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:3.23.5
     restart: unless-stopped
 
     # 宿主机名，迅雷远程控制的名称与此相关，会显示 `群晖-r66s`
