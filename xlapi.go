@@ -52,6 +52,21 @@ func mustJSON(v any) []byte {
 	return b
 }
 
+// magnetDisplayName 从磁力链接的 dn= 参数提取显示名。
+func magnetDisplayName(u string) string {
+	_, after, ok := strings.Cut(u, "dn=")
+	if !ok {
+		return ""
+	}
+	if i := strings.IndexByte(after, '&'); i >= 0 {
+		after = after[:i]
+	}
+	if dec, err := url.QueryUnescape(after); err == nil {
+		return dec
+	}
+	return after
+}
+
 // spaceOf: 仅当调用方显式传入 space 时才使用; 否则留空, 由引擎按设备空间解析。
 // 注意: 不要回填 device_id# 空间 —— 设备空间未激活时会触发 device_space_not_active,
 // 空 space 引擎反而能正确解析(实测)。创建任务后置 running 用创建响应里的 task.space。
@@ -258,12 +273,22 @@ func (a *XLAPI) addDownload(w http.ResponseWriter, r *http.Request) {
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		if u, e := url.Parse(req.URL); e == nil && u.Path != "" {
-			name = path.Base(u.Path)
+		switch {
+		case strings.HasPrefix(req.URL, "magnet:"), strings.HasPrefix(req.URL, "bt:"), strings.HasPrefix(req.URL, "ed2k:"):
+			// 磁力/种子的名称取自磁力里的 dn= 显示名(迅雷也据此/解析内容命名), 不再兜底成 download
+			name = magnetDisplayName(req.URL)
+		default:
+			if u, e := url.Parse(req.URL); e == nil && u.Path != "" {
+				name = path.Base(u.Path)
+			}
 		}
 	}
 	if name == "" || name == "." || name == "/" {
-		name = "download"
+		if strings.HasPrefix(req.URL, "magnet:") {
+			name = "" // magnet 无 dn 时留空, 由引擎解析出最终名称
+		} else {
+			name = "download"
+		}
 	}
 
 	// 目标目录: 用户指定 path(完整) > dir(下载根下的相对目录, 如 "电影/动漫") > 下载根目录。
