@@ -49,11 +49,12 @@
 
 ### 从 GitHub 安装（给 Agent 的一句话提示词）
 
-skill 目录位于仓库 https://github.com/guchengod/xunlei 的 `skills/xunlei-download/`（当前仓库为私有，公开后即可供他人安装）。
+skill 目录位于仓库 <https://github.com/guchengod/xunlei> 的 `skills/xunlei-download/`（仓库已公开，可直接 clone 安装）。
 
 给 Agent / AI 工具的安装提示词（可直接复制使用）：
 
-> 请从 https://github.com/guchengod/xunlei 仓库的 `skills/xunlei-download` 目录安装 skill：
+> 请从 <https://github.com/guchengod/xunlei> 仓库的 `skills/xunlei-download` 目录安装 skill：
+>
 > 1) git clone 该仓库；
 > 2) 把 `skills/xunlei-download` 复制到 `~/.pi/skills/`（或项目 `.agents/skills/`）；
 > 3) 用 `/skill:xunlei-download` 加载它，并说明如何用它给迅雷远程下载服务添加下载任务。
