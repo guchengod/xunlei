@@ -49,7 +49,7 @@
 
 ### 从 GitHub 安装（给 Agent 的一句话提示词）
 
-skill 目录位于仓库 <https://github.com/guchengod/xunlei> 的 `skills/xunlei-download/`（仓库已公开，可直接 clone 安装）。
+skill 目录位于仓库 <https://github.com/guchengod/xunlei> 的 `skills/xunlei-download/`。
 
 给 Agent / AI 工具的安装提示词（可直接复制使用）：
 
