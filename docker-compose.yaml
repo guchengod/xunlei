@@ -2,8 +2,8 @@
 services:
   xunlei:
     container_name: xunlei
-    # 本 fork 镜像(阿里云, 镜像版本 v1.1, 内置迅雷引擎 v3.23.5 并支持在线更新); Apple Silicon(M 系列) 通过 Rosetta 运行 amd64 镜像
-    image: crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.1
+    # 本 fork 镜像(阿里云, 镜像版本 v1.2, 内置迅雷引擎 v3.23.5 并支持在线更新); Apple Silicon(M 系列) 通过 Rosetta 运行 amd64 镜像
+    image: crpi-7g2swy3pv0gxn73h.cn-beijing.personal.cr.aliyuncs.com/galvin/xunlei:1.2
     platform: linux/amd64
     restart: unless-stopped
 
