@@ -34,65 +34,33 @@
 
 ## Agent / Skill 自动化
 
-本仓库自带一个 Agent Skill（`skills/xunlei-download/`），让 pi / 其它 Agent 可以直接通过 HTTP API 帮你**添加下载、管理任务**，适合自动化（例如收到链接自动拉取）。接口完整说明见 [API.md](API.md)。
+本仓库自带一个 Agent Skill（`skills/xunlei-download/`），任何支持 Agent Skills 的 agent / AI 工具都可以加载它，通过 HTTP API 自动**添加下载、管理任务**，适合自动化。接口完整说明见 [API.md](API.md)。
 
-### Skill 位置与加载
+### Skill 说明
 
-- skill 位于仓库根目录 `skills/xunlei-download/`（遵循 Agent Skills 标准结构，可被任何支持该标准的工具加载）。
-- 在 pi 中使用（pi 默认扫描 `~/.pi/skills/`、`.agents/skills/`，仓库根 `skills/` 需显式引入）：
-  - 复制或软链到 `~/.pi/skills/xunlei-download/`（全局），或 `.agents/skills/xunlei-download/`（项目级）；
-  - 或在 `settings.json` 的 `skills` 数组里引用本仓库 `skills/xunlei-download`；
-  - 之后即可 `/skill:xunlei-download` 调用。
-- 不依赖 skill 加载时，可直接运行脚本 `./skills/xunlei-download/scripts/xunlei.py ...`。
+- `skills/xunlei-download/` 遵循 [Agent Skills 规范](https://agentskills.io/specification)：目录名即 skill 名，含 `SKILL.md` 与辅助脚本，任何支持该标准的工具都能加载。
+- 加载后按其 `SKILL.md` 使用即可：添加/管理下载、指定分类目录保存。
+- 分类放置：用 `dirs` 查看可下载目录树，按内容类型（剧集/电影/动漫/音乐/其他）匹配子目录保存，或按用户指定的位置保存；未指定则落到下载根目录。
 
-### 从 GitHub 安装（给 Agent 的一句话提示词）
+### 从 GitHub 安装（给任何 Agent 的一句话提示词）
 
-skill 目录位于仓库 <https://github.com/guchengod/xunlei> 的 `skills/xunlei-download/`。
+可复制给任意支持 skill 的 agent / AI 工具：
 
-给 Agent / AI 工具的安装提示词（可直接复制使用）：
-
-> 请从 <https://github.com/guchengod/xunlei> 仓库的 `skills/xunlei-download` 目录安装 skill：
+> 请从 <https://github.com/guchengod/xunlei> 仓库安装 `skills/xunlei-download` skill：
 >
-> 1) git clone 该仓库；
-> 2) 把 `skills/xunlei-download` 复制到 `~/.pi/skills/`（或项目 `.agents/skills/`）；
-> 3) 用 `/skill:xunlei-download` 加载它，并说明如何用它给迅雷远程下载服务添加下载任务。
+> 1) `git clone` 该仓库；
+> 2) 把 `skills/xunlei-download` 目录安装到你的 skill 目录（按你所处 agent 的 skill 注册方式即可）；
+> 3) 加载并阅读其 `SKILL.md`，然后用它给迅雷远程下载服务添加下载任务（支持 magnet / HTTP / BT，可指定分类目录）。
 
-或直接在终端执行：
-
-```bash
-mkdir -p ~/.pi/skills && cd /tmp && rm -rf xunlei && \
-  git clone --depth 1 https://github.com/guchengod/xunlei.git && \
-  cp -r xunlei/skills/xunlei-download ~/.pi/skills/ && \
-  echo "已安装: ~/.pi/skills/xunlei-download" && rm -rf /tmp/xunlei
-```
-
-### 脚本用法（依赖 Python 3 标准库）
+或命令行：
 
 ```bash
-export XL_HOST=http://your-nas:2345      # 服务地址, 默认 http://localhost:2345
-# export XL_AUTH=user:pass               # 仅当设置了 XL_DASHBOARD_PASSWORD 时
-
-# 查看可下载目录树（Docker 挂载目录、电影/动漫等分类都在这里）
-./skills/xunlei-download/scripts/xunlei.py dirs
-
-# 添加磁力链下载（自动开始）
-./skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --name "电影"
-# 按分类保存到 /downloads/动漫/2025/（目录不存在会自动创建）
-./skills/xunlei-download/scripts/xunlei.py add "magnet:?xt=urn:btih:..." --dir "动漫/2025"
-
-# 任务列表（--all 看全部）/ 暂停 / 恢复 / 删除
-./skills/xunlei-download/scripts/xunlei.py list --all
-./skills/xunlei-download/scripts/xunlei.py pause <task_id>
-./skills/xunlei-download/scripts/xunlei.py delete <task_id>
-
-# 设备信息 / 登录态
-./skills/xunlei-download/scripts/xunlei.py info
-./skills/xunlei-download/scripts/xunlei.py login
+git clone --depth 1 https://github.com/guchengod/xunlei.git /tmp/xunlei && \
+  cp -r /tmp/xunlei/skills/xunlei-download <你的 skills 目录>/ && \
+  rm -rf /tmp/xunlei
 ```
 
-> 分类放置：Agent 可先用 `dirs` 拿到实际目录，再按内容类型（剧集/电影/动漫/音乐/其他）匹配子目录，或按用户指定的 `--dir`/`--path` 保存；未指定则落到下载根目录。
-
-脚本返回原始 JSON；出错时以非零退出码 + `{"error":...}` 报告。
+（把 `<你的 skills 目录>` 替换为你所用 agent 的 skill 目录，不存在时先用 `mkdir -p` 创建。）
 
 ### 注意事项
 
