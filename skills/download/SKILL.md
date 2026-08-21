@@ -1,5 +1,5 @@
 ---
-name: xunlei-download
+name: download
 description: 磁力搜索与多下载器调度技能 (迅雷远程下载 + 可扩展)。用于当用户需要 ① 搜索磁力/种子 (snowfl·animetosho·tsukihime 国内直连 + 可选代理站) ② 没有磁力时按规则智能挑选最优资源 ③ 把磁力/链接交给首选下载器 (默认迅雷远程下载 xlp, 失败自动回退第二下载器 qBittorrent) 下载。适用于本仓库部署的迅雷远程下载服务 (默认端口 2345), 也支持 qBittorrent WebUI 作为备选。提供零第三方依赖的 Python 脚本 (scripts/magnetdm.py + scripts/xunlei.py)。
 license: MIT
 metadata:
@@ -37,7 +37,7 @@ metadata:
 ### 1) 直接给磁力下载 (有磁力 → 下载)
 
 ```bash
-# 在本 skill 的脚本目录下执行 (仓库: skills/xunlei-download/scripts; 已安装: ~/.pi/agent/skills/xunlei-download/scripts)
+# 在本 skill 的脚本目录下执行 (仓库: skills/download/scripts; 已安装: ~/.pi/agent/skills/download/scripts)
 cd <本skill目录>/scripts
 ./magnetdm.py add "magnet:?xt=urn:btih:..." --dir 电影
 ./magnetdm.py add "https://.../x.torrent" --name 我的文件      # http/bt: 同样支持
