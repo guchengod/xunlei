@@ -1,0 +1,57 @@
+# ============================================================
+# magnetdm.py 配置 — 磁力搜索 + 智能挑选 + 多下载器调度
+# 修改后无需重启/编译, 直接生效。
+# ============================================================
+
+[search]
+# 国内直连可用的搜索引擎 (snowfl/animetosho/tsukihime 均已实测)
+engines_always = ["snowfl", "animetosho", "tsukihime"]
+# 仅当下面 [proxy].enabled = true 时额外启用的国际站
+engines_with_proxy = ["nyaa", "btdig", "apibay"]
+max_results_per_engine = 60
+per_engine_timeout = 12      # 单引擎超时(秒)
+concurrency = 4              # 并行搜索线程数
+
+[proxy]
+# 开了代理后, 国际站(nyaa/btdig/apibay)会自动加入搜索
+enabled = false
+# 三个地址填一个即可 (http 与 https 通用)
+http = ""      # 例: "http://127.0.0.1:7890"
+https = ""
+socks5 = ""    # urllib 暂不原生支持 socks5, 留空
+
+[selection]
+max_candidates = 300
+size_min_mb = 50          # 小于此大小视为无效(可能是 sample)
+size_max_gb = 80          # 大于此大小略降权
+prefer_h265 = true        # 偏好 x265/hevc 压制(更省空间)
+chinese_markers = ["中字", "简中", "繁中", "简繁", "双语", "中文字幕",
+                   "中文", "国语", "中配", "国配", "国粤", "国英", "mandarin",
+                   "chs", "cht"]
+bad_markers = ["sample", "preview", "trailer", "promo", "预告", "测试", "demo"]
+quality_keywords = ["2160p", "4k", "uhd", "1080p", "1080", "720p", "hd",
+                    "remux", "bluray", "blu-ray", "brrip", "bdrip",
+                    "web-dl", "webrip", "hdtv", "dvdrip", "cam", "ts", "tc"]
+
+[weights]
+# 各维度总分占比 (会按总和归一化)
+quality = 30
+chinese = 25
+seeders = 30
+size = 15
+
+[downloaders]
+# 顺序即回退顺序: 迅雷 -> (失败) -> qBittorrent (案例3/4)
+preferred = ["xunlei", "qbittorrent"]
+
+[xunlei]
+host = "http://localhost:2345"   # xlp 服务地址 (环境变量 XL_HOST 可覆盖)
+auth = ""                        # "user:pass" (环境变量 XL_AUTH 可覆盖) ; 仅服务端设了密码时填
+default_dir = ""                 # 未指定 --dir 时的默认保存分类, 如 "电影"
+
+[qbittorrent]
+host = "http://localhost:8080"   # qBittorrent WebUI (环境变量 QBT_HOST 可覆盖)
+username = "admin"
+password = "adminadmin"
+save_path = ""                   # 留空=用客户端默认目录
+add_paused = false

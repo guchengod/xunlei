@@ -21,3 +21,5 @@ __pycache__/
 # docker compose 运行时数据(登录态/下载缓存), 不入库
 /data/
 /cache/
+
+skills/download/config.toml
