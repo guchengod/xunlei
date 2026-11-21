@@ -1,4 +1,5 @@
-FROM --platform=${TARGETARCH} ubuntu:focal
+# jammy 提供 GLIBCXX_3.4.30+，迅雷 3.23.8 需要该版本
+FROM --platform=${TARGETARCH} ubuntu:jammy
 ARG TARGETARCH
 ENV DEBIAN_FRONTEND=noninteractive
 
